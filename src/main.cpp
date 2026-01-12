@@ -7,15 +7,6 @@
 #include <Adafruit_SSD1306.h>
 #include <WiFi.h>
 #include <RTC.h>
-#include <Arduino.h>
-#include <Arduino_Modulino.h>
-#include <Arduino_LED_Matrix.h>
-#include <ArduinoGraphics.h>
-#include <Wire.h>
-#include <Adafruit_GFX.h>
-#include <Adafruit_SSD1306.h>
-#include <WiFi.h>
-#include <RTC.h>
 #include <NTPClient.h>
 #include <WiFiUdp.h>
 #include <credentials.h>
@@ -50,6 +41,7 @@ int soilHumidity3;
 // Time
 String getTime;
 int getHours;
+
 // Millis
 unsigned long now;
 bool switchPage;
@@ -68,6 +60,7 @@ uint16_t w, h;
 #define SCREEN_WIDTH 128
 #define SCREEN_HEIGHT 32
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
+int bestSize;
 
 // WIFI
 const char ssid[] = WIFI_SSID;
@@ -107,6 +100,7 @@ void setup()
 
   // Time from WIFI
   timeClient.begin();
+  timeClient.setTimeOffset(3600);
 }
 
 void loop()
@@ -137,17 +131,61 @@ void loop()
   {
     lastDisplaySwitch = now;
     lastDisplayRefresh = now;
-    displayPage = displayPage + 1; // toggle 0 <-> 1
-  }
-  if (displayPage >= 5)
-  {
-    displayPage = 0;
+    // If currently showing an alarm page, only go back to page 0 when
+    // that alarm condition is no longer true. Otherwise continue cycling
+    // through the normal pages 0..4.
+    if (displayPage >= 5)
+    {
+      bool alarmStillActive = false;
+      if (displayPage == 5 && airHumidity > 60)
+        alarmStillActive = true;
+      if (displayPage == 6 && soilHumidity1 < 35)
+        alarmStillActive = true;
+      if (displayPage == 7 && soilHumidity2 < 25)
+        alarmStillActive = true;
+      if (displayPage == 8 && soilHumidity3 < 35)
+        alarmStillActive = true;
+
+      if (!alarmStillActive)
+      {
+        displayPage = 0;
+      }
+      // if still active, keep the alarm page
+    }
+    else
+    {
+      displayPage = displayPage + 1; // next regular page
+      if (displayPage > 4)
+        displayPage = 0;
+    }
   }
 
   if (switchPage || refreshPage)
   {
     lastDisplayRefresh = now;
     updateReadings();
+
+    // Alarm display
+    // Air
+    if (airHumidity > 60)
+    {
+      displayPage = 5;
+    }
+    // Ginseng Bonsai
+    if (soilHumidity1 < 35)
+    {
+      displayPage = 6;
+    }
+    // Drachenbaum
+    if (soilHumidity2 < 25)
+    {
+      displayPage = 7;
+    }
+    // Ficus Bonsai
+    if (soilHumidity3 < 35)
+    {
+      displayPage = 8;
+    }
 
     if (displayPage == 0)
     {
@@ -169,17 +207,30 @@ void loop()
     {
       screen("Ficus Bonsai: ", String(soilHumidity3), "%");
     }
+    else if (displayPage == 5)
+    {
+      screen("ALARM! Air Humidity too high!: ", String(airHumidity), "%");
+    }
+    else if (displayPage == 6)
+    {
+      screen("ALARM! Ginsen Bonsai dry!: ", String(soilHumidity1), "%");
+    }
+    else if (displayPage == 7)
+    {
+      screen("ALARM! Drachenbaum dry!: ", String(soilHumidity2), "%");
+    }
+    else if (displayPage == 8)
+    {
+      screen("ALARM! Ficus Bonsai dry!: ", String(soilHumidity3), "%");
+    }
   }
 }
 
 void alarm(int airHumidity, int getHours)
 {
   // Non-blocking alarm using millis() to avoid delaying the main loop.
-  // When air humidity > 60% and before 10pm-8am starts a sequence of 3 pulses spaced by pulseInterval.
-  active = false;
-  lastMillis = 0;
-  pulseCount = 0;
-  cooldownUntil = 0; // timestamp until which re-trigger is blocked
+  // When air humidity > 60% and between 09:00 and 21:59 starts a sequence of 3 pulses
+  // spaced by `pulseInterval`. Preserve state across calls (do not reset globals here).
   now = millis();
 
   // If we're in cooldown after a full sequence, don't start a new one
@@ -210,6 +261,7 @@ void alarm(int airHumidity, int getHours)
     {
       active = false;
       buzzer.tone(0, 0);
+      pulseCount = 0;
     }
     return;
   }
@@ -224,12 +276,13 @@ void alarm(int airHumidity, int getHours)
     ++pulseCount;
   }
 
-  if (pulseCount > 3)
+  if (pulseCount >= 3)
   {
     // finished sequence: stop buzzer and set cooldown so alarm won't restart for 1 minute
     active = false;
     buzzer.tone(0, 0);
     cooldownUntil = now + cooldownDuration;
+    pulseCount = 0;
   }
 }
 
@@ -237,11 +290,26 @@ void screen(const String &printDisplay1, const String &printDisplay2, const Stri
 {
   text = printDisplay1 + printDisplay2 + printDisplay3;
   display.clearDisplay();
-  display.setTextSize(2);
   display.setTextColor(WHITE);
-  display.setCursor(0, 0);
+
+  // Choose the largest text size that fits within the screen bounds.
+  bestSize = 1;
+  // Try sizes from 6 down to 1 (adjust max if you need larger fonts on bigger displays)
+  for (int sz = 6; sz >= 1; --sz)
+  {
+    display.setTextSize(sz);
+    display.getTextBounds(text, 0, 0, &tx1, &ty1, &w, &h);
+    if (w <= SCREEN_WIDTH && h <= SCREEN_HEIGHT)
+    {
+      bestSize = sz;
+      break;
+    }
+  }
+
+  display.setTextSize(bestSize);
   display.getTextBounds(text, 0, 0, &tx1, &ty1, &w, &h);
-  display.setCursor(64 - w / 2, 16 - h / 2);
+  // center text
+  display.setCursor((SCREEN_WIDTH - w) / 2, (SCREEN_HEIGHT - h) / 2);
   display.print(text);
   display.display();
 }
