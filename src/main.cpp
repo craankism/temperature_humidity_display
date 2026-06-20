@@ -23,20 +23,9 @@ NTPClient timeClient(ntpUDP);
 int frequency = 840; // Frequency of the tone in Hz
 int duration = 1000; // Duration of the tone in milliseconds
 
-// cap. sensor constants
-const int dry = 500; // value for dry sensor (0%)
-const int wet = 230; // constant for wet sensor (100%)
-
-// air humidity
+// air humidity and temperature
 int airHumidity;
-
-// cap. sensors
-int sensorVal1;
-int sensorVal2;
-int sensorVal3;
-int soilHumidity1;
-int soilHumidity2;
-int soilHumidity3;
+float temperature;
 
 // Time
 String getTime;
@@ -100,7 +89,7 @@ void setup()
 
   // Time from WIFI
   timeClient.begin();
-  timeClient.setTimeOffset(3600);
+  timeClient.setTimeOffset(7200);
 }
 
 void loop()
@@ -111,7 +100,7 @@ void loop()
   getHours = timeClient.getHours();
 
   // alarm RH > 60% and before 10pm-8am
-  alarm(airHumidity, getHours);
+  // alarm(airHumidity, getHours);
 
   // non-blocking display: switch pages every `displayInterval` ms,
   // but refresh the currently visible content every `displayRefreshInterval` ms
@@ -131,31 +120,9 @@ void loop()
   {
     lastDisplaySwitch = now;
     lastDisplayRefresh = now;
-    // If currently showing an alarm page, only go back to page 0 when
-    // that alarm condition is no longer true. Otherwise continue cycling
-    // through the normal pages 0..4.
-    if (displayPage >= 5)
-    {
-      bool alarmStillActive = false;
-      if (displayPage == 5 && airHumidity > 60)
-        alarmStillActive = true;
-      if (displayPage == 6 && soilHumidity1 < 35)
-        alarmStillActive = true;
-      if (displayPage == 7 && soilHumidity2 < 25)
-        alarmStillActive = true;
-      if (displayPage == 8 && soilHumidity3 < 35)
-        alarmStillActive = true;
-
-      if (!alarmStillActive)
-      {
-        displayPage = 0;
-      }
-      // if still active, keep the alarm page
-    }
-    else
     {
       displayPage = displayPage + 1; // next regular page
-      if (displayPage > 4)
+      if (displayPage > 2)
         displayPage = 0;
     }
   }
@@ -164,28 +131,6 @@ void loop()
   {
     lastDisplayRefresh = now;
     updateReadings();
-
-    // Alarm display
-    // Air
-    if (airHumidity > 60)
-    {
-      displayPage = 5;
-    }
-    // Ginseng Bonsai
-    if (soilHumidity1 < 35)
-    {
-      displayPage = 6;
-    }
-    // Drachenbaum
-    if (soilHumidity2 < 25)
-    {
-      displayPage = 7;
-    }
-    // Ficus Bonsai
-    if (soilHumidity3 < 35)
-    {
-      displayPage = 8;
-    }
 
     if (displayPage == 0)
     {
@@ -197,31 +142,7 @@ void loop()
     }
     else if (displayPage == 2)
     {
-      screen("Ginseng Bonsai: ", String(soilHumidity1), "%");
-    }
-    else if (displayPage == 3)
-    {
-      screen("Drachenbaum: ", String(soilHumidity2), "%");
-    }
-    else if (displayPage == 4)
-    {
-      screen("Ficus Bonsai: ", String(soilHumidity3), "%");
-    }
-    else if (displayPage == 5)
-    {
-      screen("ALARM! Air Humidity too high!: ", String(airHumidity), "%");
-    }
-    else if (displayPage == 6)
-    {
-      screen("ALARM! Ginsen Bonsai dry!: ", String(soilHumidity1), "%");
-    }
-    else if (displayPage == 7)
-    {
-      screen("ALARM! Drachenbaum dry!: ", String(soilHumidity2), "%");
-    }
-    else if (displayPage == 8)
-    {
-      screen("ALARM! Ficus Bonsai dry!: ", String(soilHumidity3), "%");
+      screen("Temperatur: ", String(temperature, 1), "C");
     }
   }
 }
@@ -318,10 +239,5 @@ void updateReadings()
 {
   timeClient.update();
   airHumidity = thermo.getHumidity();
-  sensorVal1 = analogRead(A0);
-  sensorVal2 = analogRead(A1);
-  sensorVal3 = analogRead(A2);
-  soilHumidity1 = map(sensorVal1, wet, dry, 100, 0);
-  soilHumidity2 = map(sensorVal2, wet, dry, 100, 0);
-  soilHumidity3 = map(sensorVal3, wet, dry, 100, 0);
+  temperature = thermo.getTemperature();
 }
