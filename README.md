@@ -1,7 +1,19 @@
 # automatic_watering_system
-A system to keep house plants from dying of dehydration. It checks the soil humidity with sensors and if it is too low, it will pump water to the plants. Extra: I added a air humidity sensor, to keep track of the RH of my room and alarm me, if it is above 60%.
 
-[Tutorial](docs/tutorial.md)<br>
-[How To Guide](docs/how_to_guide.md)<br>
-[Reference](docs/reference.md)<br>
-[Explanation](docs/explanation.md)<br>
+Arduino Uno R4 WiFi project that displays time, air humidity, and air temperature.
+
+## Features
+- Reads air humidity and temperature via Modulino Thermo
+- Displays time (NTP), air humidity, and air temperature on an SSD1306 OLED
+
+## Hardware
+- Arduino Uno R4 WiFi
+- Modulino Thermo (air humidity + temperature)
+- SSD1306 OLED display (128×32)
+
+## Setup
+Add your WiFi credentials to `include/credentials.h`:
+```cpp
+#define WIFI_SSID "your_ssid"
+#define WIFI_PASS "your_password"
+```
